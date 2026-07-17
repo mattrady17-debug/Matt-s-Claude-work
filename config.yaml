@@ -14,11 +14,12 @@ price_move_threshold_pct: 5.0
 sec_user_agent: "stock-monitor (matt.rady17@gmail.com)"
 
 # Optional company press-release RSS feeds, per ticker. FANUY (Fanuc ADR) does
-# not file with the SEC, so its official news feed is the only announcement
-# source for it. Add or remove feeds as you like.
-press_release_feeds:
-  FANUY:
-    - https://www.fanuc.co.jp/en/rss/index.xml
+# not file with the SEC, so until a working official feed is configured here,
+# only the price-move trigger covers it. Example format:
+# press_release_feeds:
+#   FANUY:
+#     - https://example.com/fanuc-news.xml
+press_release_feeds: {}
 
 # Anthropic model used for the single AI call per run.
 anthropic_model: claude-haiku-4-5

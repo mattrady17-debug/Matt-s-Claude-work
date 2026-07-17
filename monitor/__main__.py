@@ -120,14 +120,17 @@ def main() -> int:
     if args.date:
         trade_date = date.fromisoformat(args.date)
         args.force = True
+    elif args.force:
+        # Forced runs can happen at any hour; evaluate the most recent trading
+        # day whose after-hours session has completed.
+        trade_date = market_calendar.latest_completed_trading_day(now_et)
+        log.info("Forced run: evaluating trading day %s", trade_date)
     else:
-        trade_date = now_et.date()
-
-    if not args.force:
         ok, reason = market_calendar.should_run(now_et)
         if not ok:
             log.info("Skipping run: %s", reason)
             return 0
+        trade_date = now_et.date()
 
     cfg = load_config()
     state = State(Path(ROOT) / "state" / "state.json")

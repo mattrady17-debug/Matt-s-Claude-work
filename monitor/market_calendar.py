@@ -32,6 +32,18 @@ def in_run_window(now: datetime) -> bool:
     return now.hour == 20
 
 
+def latest_completed_trading_day(now: datetime) -> date:
+    """The most recent trading day whose after-hours session (20:00 ET) is over."""
+    from datetime import timedelta
+
+    d = now.date()
+    if not (is_trading_day(d) and now.hour >= 20):
+        d -= timedelta(days=1)
+        while not is_trading_day(d):
+            d -= timedelta(days=1)
+    return d
+
+
 def should_run(now: datetime | None = None) -> tuple[bool, str]:
     now = now or now_eastern()
     if not is_trading_day(now.date()):
