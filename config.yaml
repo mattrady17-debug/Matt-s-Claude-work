@@ -1,0 +1,24 @@
+# Stock monitor configuration.
+
+# Where the daily email goes. Edit freely.
+recipient_email: matt.rady17@gmail.com
+
+# Resend's shared onboarding sender works on the free tier without domain setup.
+# If you later verify your own domain in Resend, change this.
+from_email: "Stock Monitor <onboarding@resend.dev>"
+
+# Absolute percentage move (vs prior regular-session close) that triggers an alert.
+price_move_threshold_pct: 5.0
+
+# SEC EDGAR requires a descriptive User-Agent identifying the requester.
+sec_user_agent: "stock-monitor (matt.rady17@gmail.com)"
+
+# Optional company press-release RSS feeds, per ticker. FANUY (Fanuc ADR) does
+# not file with the SEC, so its official news feed is the only announcement
+# source for it. Add or remove feeds as you like.
+press_release_feeds:
+  FANUY:
+    - https://www.fanuc.co.jp/en/rss/index.xml
+
+# Anthropic model used for the single AI call per run.
+anthropic_model: claude-haiku-4-5

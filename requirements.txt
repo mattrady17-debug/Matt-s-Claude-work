@@ -1,0 +1,5 @@
+yfinance>=0.2.50
+requests>=2.31
+anthropic>=0.40
+holidays>=0.50
+PyYAML>=6.0

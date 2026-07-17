@@ -1,0 +1,68 @@
+name: Daily stock monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (print the email, send nothing)"
+        type: boolean
+        default: true
+  # SCHEDULE IS INTENTIONALLY DISABLED until Matt gives the OK (build step 4).
+  # GitHub cron runs on UTC. Two entries cover both EDT and EST so the program's
+  # own 20:00-20:59 ET gate (monitor/market_calendar.py) picks exactly one per
+  # day, year-round:
+  #   00:30 UTC = 20:30 EDT (summer) / 19:30 EST -> gate accepts only in summer
+  #   01:30 UTC = 21:30 EDT / 20:30 EST (winter) -> gate accepts only in winter
+  # To go live, uncomment these three lines:
+  # schedule:
+  #   - cron: "30 0 * * 2-6"
+  #   - cron: "30 1 * * 2-6"
+
+concurrency:
+  group: daily-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # to commit the anti-duplication state file back
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run monitor
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              python -m monitor --dry-run --force
+            else
+              python -m monitor --force
+            fi
+          else
+            python -m monitor
+          fi
+
+      - name: Commit updated state
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- state/state.json; then
+            git add state/state.json
+            git commit -m "chore: record alerted events for $(date -u +%F)"
+            git push
+          else
+            echo "No state changes to commit."
+          fi

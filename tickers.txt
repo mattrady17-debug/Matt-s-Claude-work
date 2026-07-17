@@ -1,0 +1,6 @@
+# One ticker per line. Lines starting with # are ignored.
+VRTX
+FANUY
+TDY
+AMZN
+MSFT
