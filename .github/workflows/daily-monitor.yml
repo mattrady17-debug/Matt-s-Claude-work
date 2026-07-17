@@ -1,6 +1,10 @@
 name: Daily stock monitor
 
 on:
+  # TEMPORARY while setting up: every push runs a DRY RUN (prints the email in
+  # the Actions log, sends nothing). Remove this trigger before go-live.
+  push:
+    branches: [claude/daily-stock-monitor-5g55x3]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -44,7 +48,9 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "push" ]; then
+            python -m monitor --dry-run --force
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ inputs.dry_run }}" = "true" ]; then
               python -m monitor --dry-run --force
             else
@@ -55,7 +61,7 @@ jobs:
           fi
 
       - name: Commit updated state
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.dry_run != true) }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
