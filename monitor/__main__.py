@@ -28,14 +28,17 @@ def evaluate(cfg, trade_date: date, state: State) -> tuple[str, str, list[str]]:
 
     # 1. Price moves ---------------------------------------------------------
     checks: dict[str, prices.PriceCheck] = {}
+    failed_tickers: list[str] = []
     for ticker in cfg.tickers:
+        check = None
         try:
             check = prices.fetch_price_check(ticker, trade_date)
         except Exception:
             log.exception("%s: price check failed", ticker)
-            continue
         if check:
             checks[ticker] = check
+        else:
+            failed_tickers.append(ticker)
 
     for ticker, check in checks.items():
         event_id = f"{ticker}:price:{trade_date.isoformat()}"
@@ -96,12 +99,13 @@ def evaluate(cfg, trade_date: date, state: State) -> tuple[str, str, list[str]]:
     # 4. Compose -------------------------------------------------------------
     if not events:
         subject = f"Stock monitor {trade_date.isoformat()}: no trigger events"
-        body = report.no_trigger_body(trade_date)
+        if failed_tickers:
+            subject += " (data issues)"
+        body = report.no_trigger_body(trade_date, failed_tickers)
     else:
         tickers = ", ".join(dict.fromkeys(e.ticker for e in events))
         subject = f"Stock monitor {trade_date.isoformat()}: ALERT - {tickers}"
-        # Only tickers with an actual triggered event get commentary sections.
-        body = report.trigger_body(trade_date, events, commentary)
+        body = report.trigger_body(trade_date, events, commentary, failed_tickers)
     return subject, body, new_event_ids
 
 

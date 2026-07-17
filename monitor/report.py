@@ -15,12 +15,22 @@ class Event:
     url: str | None = None
 
 
-def no_trigger_body(trade_date: date) -> str:
+def data_issue_note(failed_tickers: list[str]) -> str:
     return (
+        "WARNING: price data could not be retrieved for: "
+        + ", ".join(failed_tickers)
+        + ". These tickers were NOT fully evaluated today."
+    )
+
+
+def no_trigger_body(trade_date: date, failed_tickers: list[str] | None = None) -> str:
+    body = (
         f"US Trading Date: {trade_date.isoformat()}\n"
         "Status: No qualifying trigger events today.\n"
-        "All monitored securities evaluated successfully.\n"
     )
+    if failed_tickers:
+        return body + data_issue_note(failed_tickers) + "\n"
+    return body + "All monitored securities evaluated successfully.\n"
 
 
 def price_move_facts(check: PriceCheck) -> str:
@@ -49,12 +59,15 @@ def trigger_body(
     trade_date: date,
     events: list[Event],
     commentary: dict[str, str],
+    failed_tickers: list[str] | None = None,
 ) -> str:
     lines = [
         f"US Trading Date: {trade_date.isoformat()}",
         f"Status: {len(events)} qualifying trigger event(s).",
-        "",
     ]
+    if failed_tickers:
+        lines.append(data_issue_note(failed_tickers))
+    lines.append("")
     for e in events:
         lines += [
             "=" * 60,

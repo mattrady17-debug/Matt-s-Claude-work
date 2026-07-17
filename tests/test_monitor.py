@@ -84,6 +84,12 @@ def test_no_trigger_body_exact_format():
         "All monitored securities evaluated successfully.\n"
     )
 
+def test_no_trigger_body_reports_data_issues_honestly():
+    body = report.no_trigger_body(date(2026, 7, 16), ["FANUY", "TDY"])
+    assert "WARNING: price data could not be retrieved for: FANUY, TDY" in body
+    assert "evaluated successfully" not in body
+
+
 def test_trigger_body_contains_required_fields():
     events = [
         report.Event("AMZN", "Price Move", "Prior close 100.00. Regular-session close 106.00 (+6.00%)."),
