@@ -1,26 +1,20 @@
 name: Daily stock monitor
 
 on:
-  # TEMPORARY while setting up: every push runs a DRY RUN (prints the email in
-  # the Actions log, sends nothing). Remove this trigger before go-live.
-  push:
-    branches: [claude/daily-stock-monitor-5g55x3]
   workflow_dispatch:
     inputs:
       dry_run:
         description: "Dry run (print the email, send nothing)"
         type: boolean
         default: true
-  # SCHEDULE IS INTENTIONALLY DISABLED until Matt gives the OK (build step 4).
   # GitHub cron runs on UTC. Two entries cover both EDT and EST so the program's
   # own 20:00-20:59 ET gate (monitor/market_calendar.py) picks exactly one per
   # day, year-round:
   #   00:30 UTC = 20:30 EDT (summer) / 19:30 EST -> gate accepts only in summer
   #   01:30 UTC = 21:30 EDT / 20:30 EST (winter) -> gate accepts only in winter
-  # To go live, uncomment these three lines:
-  # schedule:
-  #   - cron: "30 0 * * 2-6"
-  #   - cron: "30 1 * * 2-6"
+  schedule:
+    - cron: "30 0 * * 2-6"
+    - cron: "30 1 * * 2-6"
 
 concurrency:
   group: daily-monitor
@@ -48,9 +42,7 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            python -m monitor --dry-run --force
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ inputs.dry_run }}" = "true" ]; then
               python -m monitor --dry-run --force
             else
