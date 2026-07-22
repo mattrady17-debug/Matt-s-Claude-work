@@ -1,9 +1,9 @@
 """Daily US stock market monitor.
 
 Usage:
-  python -m monitor --dry-run            # print the email, send nothing
-  python -m monitor --dry-run --force    # also skip the 20:00-20:59 ET time gate
-  python -m monitor                      # scheduled mode: gate + send + save state
+  python -m monitor                      # scheduled mode: send once per trading day
+  python -m monitor --dry-run --force    # print the email, send nothing
+  python -m monitor --force              # send even if today's email already went out
 """
 
 import argparse
@@ -114,35 +114,36 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true",
                         help="print the email instead of sending it")
     parser.add_argument("--force", action="store_true",
-                        help="skip the trading-day / 20:00-20:59 ET gate")
+                        help="run even if the daily email was already sent")
     parser.add_argument("--date", help="evaluate a specific date (YYYY-MM-DD), implies --force")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     now_et = market_calendar.now_eastern()
-    if args.date:
-        trade_date = date.fromisoformat(args.date)
-        args.force = True
-    elif args.force:
-        # Forced runs can happen at any hour; evaluate the most recent trading
-        # day whose after-hours session has completed.
-        trade_date = market_calendar.latest_completed_trading_day(now_et)
-        log.info("Forced run: evaluating trading day %s", trade_date)
-    else:
-        ok, reason = market_calendar.should_run(now_et)
-        if not ok:
-            log.info("Skipping run: %s", reason)
-            return 0
-        trade_date = now_et.date()
-
     cfg = load_config()
     state = State(Path(ROOT) / "state" / "state.json")
+
+    # GitHub cron fires late (often by hours), so never gate on the clock:
+    # always evaluate the most recent trading day whose after-hours session
+    # has completed, and let the sent-marker below guarantee one email/day.
+    if args.date:
+        trade_date = date.fromisoformat(args.date)
+    else:
+        trade_date = market_calendar.latest_completed_trading_day(now_et)
+    log.info("Evaluating trading day %s (now %s ET)", trade_date, f"{now_et:%Y-%m-%d %H:%M}")
+
+    marker = market_calendar.daily_email_marker(trade_date)
+    if not args.force and not args.date:
+        if state.already_alerted(marker):
+            log.info("Daily email for %s already sent; nothing to do", trade_date)
+            return 0
 
     subject, body, new_event_ids = evaluate(cfg, trade_date, state)
     emailer.deliver(subject, body, cfg.from_email, cfg.recipient_email, dry_run=args.dry_run)
 
     if not args.dry_run:
+        state.record(marker, trade_date)
         for event_id in new_event_ids:
             state.record(event_id, trade_date)
         state.prune(trade_date)

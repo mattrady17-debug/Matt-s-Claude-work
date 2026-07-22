@@ -24,28 +24,40 @@ ET = ZoneInfo("America/New_York")
 
 # --- market calendar ---------------------------------------------------------
 
-def test_gate_accepts_2030_et_on_trading_day():
-    ok, _ = market_calendar.should_run(datetime(2026, 7, 16, 20, 30, tzinfo=ET))
-    assert ok
+def lctd(dt_utc):
+    return market_calendar.latest_completed_trading_day(dt_utc.astimezone(ET))
 
-def test_gate_rejects_1930_et():
-    ok, reason = market_calendar.should_run(datetime(2026, 7, 16, 19, 30, tzinfo=ET))
-    assert not ok and "window" in reason
+def test_punctual_evening_firing_evaluates_that_day():
+    # 00:47 UTC Fri = 20:47 EDT Thu -> evaluates Thursday
+    assert lctd(datetime(2026, 7, 17, 0, 47, tzinfo=ZoneInfo("UTC"))) == date(2026, 7, 16)
 
-def test_gate_rejects_weekend_and_holiday():
-    assert not market_calendar.should_run(datetime(2026, 7, 18, 20, 30, tzinfo=ET))[0]  # Sat
-    assert not market_calendar.should_run(datetime(2026, 7, 3, 20, 30, tzinfo=ET))[0]   # July 4th observed
+def test_hours_late_firing_still_evaluates_correct_day():
+    # The production failure: cron fired ~3h late. 03:54 UTC = 23:54 EDT same
+    # trading day; 04:43 UTC = 00:43 EDT next day. Both must map to Jul 16...
+    assert lctd(datetime(2026, 7, 17, 3, 54, tzinfo=ZoneInfo("UTC"))) == date(2026, 7, 16)
+    assert lctd(datetime(2026, 7, 17, 4, 43, tzinfo=ZoneInfo("UTC"))) == date(2026, 7, 16)
+    # ...and the next-morning catch-up too.
+    assert lctd(datetime(2026, 7, 17, 10, 47, tzinfo=ZoneInfo("UTC"))) == date(2026, 7, 16)
 
-def test_dst_pair_selects_exactly_one_cron_per_day():
-    # 00:30 UTC and 01:30 UTC firings on a summer and a winter trading day
-    for d in (date(2026, 7, 16), date(2026, 1, 15)):
-        accepted = 0
-        for utc_hour in (0, 1):
-            fire = datetime(d.year, d.month, d.day + 1, utc_hour, 30, tzinfo=ZoneInfo("UTC"))
-            now_et = fire.astimezone(ET)
-            if market_calendar.should_run(now_et)[0]:
-                accepted += 1
-        assert accepted == 1, f"{d}: expected exactly one accepted firing"
+def test_winter_firings_map_correctly():
+    # Winter (EST): 00:47 UTC Thu = 19:47 EST Wed -> Wed session NOT complete
+    # yet -> evaluates Tuesday; 01:47 UTC = 20:47 EST Wed -> Wednesday.
+    assert lctd(datetime(2026, 1, 15, 0, 47, tzinfo=ZoneInfo("UTC"))) == date(2026, 1, 13)
+    assert lctd(datetime(2026, 1, 15, 1, 47, tzinfo=ZoneInfo("UTC"))) == date(2026, 1, 14)
+
+def test_weekend_and_holiday_roll_back_to_last_trading_day():
+    # Sunday evening -> previous Friday
+    assert lctd(datetime(2026, 7, 20, 1, 0, tzinfo=ZoneInfo("UTC"))) == date(2026, 7, 17)
+    # Evening after July 4th observed holiday (Fri 2026-07-03) -> Thursday
+    assert lctd(datetime(2026, 7, 4, 1, 0, tzinfo=ZoneInfo("UTC"))) == date(2026, 7, 2)
+
+def test_daily_marker_dedupes_repeat_firings(tmp_path):
+    s = State(tmp_path / "state.json")
+    marker = market_calendar.daily_email_marker(date(2026, 7, 21))
+    assert not s.already_alerted(marker)
+    s.record(marker, date(2026, 7, 21))
+    assert s.already_alerted(marker)
+    assert not s.already_alerted(market_calendar.daily_email_marker(date(2026, 7, 22)))
 
 
 # --- price trigger logic -----------------------------------------------------

@@ -24,7 +24,7 @@ silence always means "something is broken", never "nothing happened".
 | Announcements | SEC EDGAR submissions API + optional company press-release RSS feeds |
 | AI step | One call per run to Claude Haiku (`claude-haiku-4-5`): filters announcements against the exclusion list and writes the analyst-commentary summary from yfinance analyst data. Costs roughly $1–3/month. |
 | Email | Resend (free tier: 100 emails/day) |
-| Schedule | GitHub Actions cron. Cron is UTC, so two entries fire (00:30 and 01:30 UTC) and the program's own New York clock accepts exactly one — the one inside 20:00–20:59 ET — so daylight-saving changes never break the schedule. Weekends and NYSE holidays are skipped in code. |
+| Schedule | GitHub Actions cron (00:47, 01:47 and a 10:47 UTC catch-up). GitHub's cron is best-effort and often fires hours late, so the program never trusts the clock: every firing evaluates the most recent trading day whose after-hours session (20:00 ET) has completed, and a sent-marker in the state file guarantees exactly one email per trading day — robust to delays and daylight-saving changes alike. Weekends and NYSE holidays are skipped in code. |
 | Anti-duplication | `state/state.json` records every event already alerted on; the workflow commits it back after each real run. The same filing or same-day price move never alerts twice; a fresh >5% move on a later trading day is a new trigger. |
 
 ## Changing the ticker list

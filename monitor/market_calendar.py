@@ -1,9 +1,11 @@
-"""US/Eastern time gate and NYSE holiday calendar.
+"""US/Eastern time logic and NYSE holiday calendar.
 
-GitHub Actions cron runs on UTC and cannot follow US daylight-saving changes,
-so the workflow fires two candidate crons and this module decides whether a
-given firing is the real 20:00-21:00 ET window on a trading day. With two
-crons an hour apart, exactly one lands inside the window year-round.
+GitHub Actions cron runs on UTC, cannot follow US daylight-saving changes,
+and fires late — often by hours — on its shared best-effort scheduler. So
+instead of gating on a wall-clock window, every scheduled firing evaluates
+the most recent trading day whose after-hours session (20:00 ET) is over,
+and a per-day sent marker in the state file guarantees exactly one email per
+trading day however many firings arrive and however late they are.
 """
 
 from datetime import date, datetime
@@ -27,11 +29,6 @@ def is_trading_day(d: date) -> bool:
     return d.weekday() < 5 and d not in nyse_holidays(d.year)
 
 
-def in_run_window(now: datetime) -> bool:
-    """True only during 20:00-20:59 ET, after the after-hours session closes."""
-    return now.hour == 20
-
-
 def latest_completed_trading_day(now: datetime) -> date:
     """The most recent trading day whose after-hours session (20:00 ET) is over."""
     from datetime import timedelta
@@ -44,10 +41,6 @@ def latest_completed_trading_day(now: datetime) -> date:
     return d
 
 
-def should_run(now: datetime | None = None) -> tuple[bool, str]:
-    now = now or now_eastern()
-    if not is_trading_day(now.date()):
-        return False, f"{now.date()} is not a US trading day (weekend or NYSE holiday)"
-    if not in_run_window(now):
-        return False, f"{now:%H:%M} ET is outside the 20:00-20:59 ET run window"
-    return True, "trading day, inside run window"
+def daily_email_marker(d: date) -> str:
+    """State-file key recording that the daily email for `d` was sent."""
+    return f"daily-email:{d.isoformat()}"

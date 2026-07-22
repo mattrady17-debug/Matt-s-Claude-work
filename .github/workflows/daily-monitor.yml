@@ -7,14 +7,19 @@ on:
         description: "Dry run (print the email, send nothing)"
         type: boolean
         default: true
-  # GitHub cron runs on UTC. Two entries cover both EDT and EST so the program's
-  # own 20:00-20:59 ET gate (monitor/market_calendar.py) picks exactly one per
-  # day, year-round:
-  #   00:30 UTC = 20:30 EDT (summer) / 19:30 EST -> gate accepts only in summer
-  #   01:30 UTC = 21:30 EDT / 20:30 EST (winter) -> gate accepts only in winter
+  # GitHub cron runs on UTC and fires late - often by HOURS - on its shared
+  # best-effort scheduler. The program is delay-proof: every firing evaluates
+  # the most recent trading day whose after-hours session (20:00 ET) is over,
+  # and a sent-marker in state/state.json guarantees exactly one email per
+  # trading day no matter how many firings arrive or how late.
+  #   00:47 UTC = 20:47 EDT (evening send in summer)
+  #   01:47 UTC = 20:47 EST (evening send in winter; no-op in summer)
+  #   10:47 UTC = morning catch-up in case both evening firings were lost
+  # Off-peak minute (:47) chosen because :00/:30 slots are the most delayed.
   schedule:
-    - cron: "30 0 * * 2-6"
-    - cron: "30 1 * * 2-6"
+    - cron: "47 0 * * 2-6"
+    - cron: "47 1 * * 2-6"
+    - cron: "47 10 * * 2-6"
 
 concurrency:
   group: daily-monitor
