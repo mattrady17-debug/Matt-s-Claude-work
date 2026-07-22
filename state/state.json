@@ -1,3 +1,6 @@
 {
-  "alerted_events": {}
+  "alerted_events": {
+    "TDY:price:2026-07-21": "2026-07-21",
+    "daily-email:2026-07-21": "2026-07-21"
+  }
 }
