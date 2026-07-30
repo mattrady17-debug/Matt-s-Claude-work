@@ -60,12 +60,24 @@ changes, media summaries, market recaps, commentary about previous events,
 and follow-up reporting. For each kept item write a one-sentence factual
 description with no speculation.
 
-JOB 2 - Analyst commentary. For each ticker listed under "triggered_tickers",
-write a short paragraph summarising post-event analyst reaction ONLY:
-ratings actions, price-target changes, and consensus themes, drawn strictly
-from the analyst data provided. Name firms where the data includes them.
-No speculation, no predictions, no advice. If the data shows no recent
-analyst activity, say exactly that."""
+JOB 2 - Market and analyst commentary. For each ticker listed under
+"triggered_tickers", write an extended commentary of two to four short
+paragraphs, drawn STRICTLY from the data provided, structured as:
+
+1. Likely driver of the move: what the provided news headlines, filings and
+   earnings dates indicate caused it. Attribute every claim to its source
+   (e.g. 'per a Reuters headline dated ...'). Use the market-context data to
+   say whether the move was stock-specific or part of a broader market move.
+   If the provided material does not identify a driver, state plainly that
+   the driver is not identifiable from available sources - never invent one.
+2. Analyst reaction: rating actions and price-target changes, naming firms
+   and dates from the data.
+3. Consensus positioning: the buy/hold/sell distribution and how the current
+   price compares with the low/mean/high price targets provided.
+
+Plain factual prose. No speculation beyond what the sources state, no
+predictions, no investment advice. If a section has no supporting data,
+say so in one sentence rather than padding."""
 
 
 def run_ai_step(
@@ -73,6 +85,8 @@ def run_ai_step(
     candidate_announcements: list[dict],
     triggered_tickers: list[str],
     analyst_snapshots: list[dict],
+    market_context: dict | None = None,
+    price_moves: dict | None = None,
 ) -> dict:
     """Returns {"announcements": [...], "commentary": [...]} per SCHEMA."""
     fallback = {
@@ -105,13 +119,15 @@ def run_ai_step(
     payload = {
         "candidate_announcements": candidate_announcements,
         "triggered_tickers": triggered_tickers,
+        "price_moves": price_moves or {},
+        "market_context": market_context,
         "analyst_data": analyst_snapshots,
     }
     try:
         client = anthropic.Anthropic()
         response = client.messages.create(
             model=model,
-            max_tokens=4000,
+            max_tokens=8000,
             system=SYSTEM,
             output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
             messages=[{"role": "user", "content": json.dumps(payload, indent=2)}],

@@ -7,6 +7,10 @@ on:
         description: "Dry run (print the email, send nothing)"
         type: boolean
         default: true
+      date:
+        description: "Optional: evaluate a specific past date (YYYY-MM-DD), ignoring dedupe"
+        type: string
+        default: ""
   # GitHub cron runs on UTC and fires late - often by HOURS - on its shared
   # best-effort scheduler. The program is delay-proof: every firing evaluates
   # the most recent trading day whose after-hours session (20:00 ET) is over,
@@ -48,10 +52,14 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            EXTRA=""
+            if [ -n "${{ inputs.date }}" ]; then
+              EXTRA="--date ${{ inputs.date }}"
+            fi
             if [ "${{ inputs.dry_run }}" = "true" ]; then
-              python -m monitor --dry-run --force
+              python -m monitor --dry-run --force $EXTRA
             else
-              python -m monitor --force
+              python -m monitor --force $EXTRA
             fi
           else
             python -m monitor

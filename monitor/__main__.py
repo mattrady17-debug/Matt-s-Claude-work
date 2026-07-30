@@ -13,14 +13,16 @@ from datetime import date
 from pathlib import Path
 
 from . import ai, announcements, emailer, market_calendar, prices, report
-from .analyst import fetch_analyst_snapshot
+from .analyst import fetch_analyst_snapshot, fetch_market_context
 from .config import ROOT, load_config
 from .state import State
 
 log = logging.getLogger("monitor")
 
 
-def evaluate(cfg, trade_date: date, state: State) -> tuple[str, str, list[str]]:
+def evaluate(
+    cfg, trade_date: date, state: State, ignore_dedupe: bool = False
+) -> tuple[str, str, list[str]]:
     """Run all checks. Returns (subject, body, newly_alerted_event_ids)."""
     events: list[report.Event] = []
     new_event_ids: list[str] = []
@@ -42,7 +44,8 @@ def evaluate(cfg, trade_date: date, state: State) -> tuple[str, str, list[str]]:
 
     for ticker, check in checks.items():
         event_id = f"{ticker}:price:{trade_date.isoformat()}"
-        if check.triggered(cfg.price_move_threshold_pct) and not state.already_alerted(event_id):
+        already = state.already_alerted(event_id) and not ignore_dedupe
+        if check.triggered(cfg.price_move_threshold_pct) and not already:
             events.append(report.Event(ticker, "Price Move", report.price_move_facts(check)))
             new_event_ids.append(event_id)
             triggered_tickers.append(ticker)
@@ -53,7 +56,7 @@ def evaluate(cfg, trade_date: date, state: State) -> tuple[str, str, list[str]]:
         for a in announcements.gather_announcements(
             cfg.tickers, trade_date, cfg.sec_user_agent, cfg.press_release_feeds
         )
-        if not state.already_alerted(a.event_id)
+        if ignore_dedupe or not state.already_alerted(a.event_id)
     ]
 
     # 3. Single AI call: filter announcements + write analyst commentary -----
@@ -61,6 +64,18 @@ def evaluate(cfg, trade_date: date, state: State) -> tuple[str, str, list[str]]:
         a.ticker for a in candidates if a.ticker not in triggered_tickers
     ]
     snapshots = [fetch_analyst_snapshot(t, trade_date) for t in dict.fromkeys(prelim_tickers)]
+    market_context = fetch_market_context(trade_date) if prelim_tickers else None
+    price_moves = {
+        t: {
+            "prior_close": checks[t].prior_close,
+            "regular_close": checks[t].regular_close,
+            "regular_move_pct": checks[t].regular_move_pct(),
+            "after_hours_close": checks[t].after_hours_close,
+            "after_hours_move_pct": checks[t].after_hours_move_pct(),
+        }
+        for t in prelim_tickers
+        if t in checks
+    }
     ai_out = ai.run_ai_step(
         cfg.anthropic_model,
         [
@@ -76,6 +91,8 @@ def evaluate(cfg, trade_date: date, state: State) -> tuple[str, str, list[str]]:
         ],
         prelim_tickers,
         snapshots,
+        market_context=market_context,
+        price_moves=price_moves,
     )
 
     verdicts = {v["event_id"]: v for v in ai_out.get("announcements", [])}
@@ -139,7 +156,10 @@ def main() -> int:
             log.info("Daily email for %s already sent; nothing to do", trade_date)
             return 0
 
-    subject, body, new_event_ids = evaluate(cfg, trade_date, state)
+    # Explicit-date runs are demos/backfills: re-evaluate even already-alerted events.
+    subject, body, new_event_ids = evaluate(
+        cfg, trade_date, state, ignore_dedupe=bool(args.date)
+    )
     emailer.deliver(subject, body, cfg.from_email, cfg.recipient_email, dry_run=args.dry_run)
 
     if not args.dry_run:
