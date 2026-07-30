@@ -3,3 +3,4 @@ requests>=2.31
 anthropic>=0.40
 holidays>=0.50
 PyYAML>=6.0
+lxml>=5.0
